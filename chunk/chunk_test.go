@@ -74,10 +74,10 @@ func TestPaseMca(t *testing.T) {
 	}
 	defer f.Close()
 	type test struct {
-		XPos int32 `nbt:"xPos"`
+		Entities interface{}
 	}
 
-	data, err := PaseMca[test](f)
+	data, err := PaseMca[test](f, "")
 	if err != nil {
 		t.Fatal(err)
 	}

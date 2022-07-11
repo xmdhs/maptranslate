@@ -1,4 +1,4 @@
-module github.com/xmdhs/regionfix
+module github.com/xmdhs/maptranslate
 
 go 1.18
 

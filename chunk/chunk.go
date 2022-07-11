@@ -8,17 +8,18 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"reflect"
 
 	"github.com/Tnze/go-mc/nbt"
 	"github.com/Tnze/go-mc/save/region"
 )
 
-func PaseMca[K any](f io.ReadWriteSeeker) ([]K, error) {
+func PaseMca[K any](f io.ReadWriteSeeker, filePath string) (Region[K], error) {
 	rg, err := region.Load(f)
 	if err != nil {
-		return nil, fmt.Errorf("PaseMca: %w", err)
+		return Region[K]{}, fmt.Errorf("PaseMca: %w", err)
 	}
-	cl := make([]K, 0)
+	cl := make([]Chunk[K], 0)
 	for x := 0; x < 32; x++ {
 		for y := 0; y < 32; y++ {
 			if !rg.ExistSector(x, y) {
@@ -26,22 +27,28 @@ func PaseMca[K any](f io.ReadWriteSeeker) ([]K, error) {
 			}
 			b, err := rg.ReadSector(x, y)
 			if err != nil {
-				return nil, fmt.Errorf("PaseMca: %w", err)
+				return Region[K]{}, fmt.Errorf("PaseMca: %w", err)
 			}
 			b, err = mcDecompress(b)
 			if err != nil {
-				return nil, fmt.Errorf("PaseMca: %w", err)
+				return Region[K]{}, fmt.Errorf("PaseMca: %w", err)
 			}
 			var v K
 			err = nbt.Unmarshal(b, &v)
 			if err != nil {
-				return nil, fmt.Errorf("PaseMca: %w", err)
+				return Region[K]{}, fmt.Errorf("PaseMca: %w", err)
 			}
-			cl = append(cl, v)
+			cl = append(cl, Chunk[K]{
+				X:    x,
+				Z:    y,
+				Data: v,
+			})
 		}
 	}
-	return cl, nil
-
+	return Region[K]{
+		FilePath: filePath,
+		Chunk:    cl,
+	}, nil
 }
 
 var ErrFormt = errors.New("错误的格式")
@@ -80,3 +87,63 @@ var (
 	ErrInvalidChunk       = errors.New("invalid chunk")
 	ErrUnKnownCompression = errors.New("unknown compression")
 )
+
+type Region[K any] struct {
+	FilePath string
+	Chunk    []Chunk[K] `json:",omitempty"`
+}
+
+func (r *Region[K]) RemoveNull() {
+	newChunk := []Chunk[K]{}
+	for _, v := range r.Chunk {
+		if !reflect.ValueOf(v.Data).IsZero() {
+			newChunk = append(newChunk, v)
+		}
+	}
+	r.Chunk = newChunk
+
+}
+
+type Chunk[K any] struct {
+	X    int
+	Z    int
+	Data K
+}
+
+func (c *Chunk[K]) RemoveNull() {
+	dv := reflect.ValueOf(&c.Data).Elem()
+	if dv.Kind() != reflect.Struct {
+		return
+	}
+	dt := reflect.TypeOf(c.Data)
+	l := reflect.VisibleFields(dt)
+
+	anyListType := reflect.TypeOf([]any{})
+
+	needDel := [][]int{}
+	for _, t := range l {
+		v := dv.FieldByIndex(t.Index)
+
+		if v.Kind() != reflect.Interface || v.IsNil() {
+			continue
+		}
+		v = v.Elem()
+
+		if !v.CanConvert(anyListType) {
+			continue
+		}
+
+		v = v.Convert(anyListType)
+
+		if v.Kind() != reflect.Slice {
+			continue
+		}
+		if v.Len() == 0 {
+			needDel = append(needDel, t.Index)
+		}
+	}
+	for _, v := range needDel {
+		v := dv.FieldByIndex(v)
+		v.Set(reflect.Zero(v.Type()))
+	}
+}
