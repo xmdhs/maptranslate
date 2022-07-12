@@ -3,7 +3,6 @@ package chunk
 import (
 	"errors"
 	"fmt"
-	"reflect"
 
 	"github.com/Tnze/go-mc/nbt"
 	"github.com/Tnze/go-mc/save/region"
@@ -34,7 +33,7 @@ func WriteChunk[K any](d Region[K]) error {
 		if err != nil {
 			return fmt.Errorf("WriteChunk: %w", err)
 		}
-		var a any
+		var a map[string]any
 		err = nbt.Unmarshal(b, &a)
 		if err != nil {
 			return fmt.Errorf("WriteChunk: %w", err)
@@ -59,7 +58,7 @@ func WriteChunk[K any](d Region[K]) error {
 	return nil
 }
 
-func merge(dst, src any) error {
+func merge(dst *map[string]any, src any) error {
 	anym := map[string]any{}
 	d, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		TagName: "json",
@@ -76,45 +75,8 @@ func merge(dst, src any) error {
 	}
 	delKey(&anym)
 
-	tempA := dst.(*any)
-	dm := (*tempA).(map[string]any)
-
-	mergaMap(&dm, &anym)
+	*dst = tomerge(*dst, anym, 0)
 	return nil
-}
-
-func mergaMap(dst, src *map[string]any) {
-	for k, v := range *src {
-		if vv, ok := (*dst)[k]; ok {
-			rvv := reflect.ValueOf(vv)
-			t := reflect.TypeOf(vv)
-			kind := t.Kind()
-
-			switch kind {
-			case reflect.Map:
-				d := vv.(map[string]any)
-				s := v.(map[string]any)
-				mergaMap(&d, &s)
-				(*dst)[k] = s
-				continue
-			case reflect.Slice:
-				if t.Elem().Kind() == reflect.Map {
-
-				}
-				nl := reflect.MakeSlice(t, rvv.Len(), rvv.Len())
-				l := v.([]any)
-				for i, v := range l {
-					rv := reflect.ValueOf(v)
-					rv = rv.Convert(t.Elem())
-					nl.Index(i).Set(rv)
-				}
-				(*dst)[k] = nl.Interface()
-			default:
-				(*dst)[k] = v
-			}
-
-		}
-	}
 }
 
 type ErrNotExistSector struct {
