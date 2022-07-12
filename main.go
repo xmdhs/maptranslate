@@ -26,6 +26,7 @@ func main() {
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Println(err)
+			bs.Scan()
 		}
 	}()
 
@@ -34,11 +35,11 @@ func main() {
 		cxt := context.Background()
 		l, err := getForDataDir(cxt, `region`)
 		if err != nil {
-			panic(err)
+			fmt.Println(`region`, err)
 		}
 		ll, err := getForDataDir(cxt, `entities`)
 		if err != nil {
-			panic(err)
+			fmt.Println(`entities`, err)
 		}
 		l = append(l, ll...)
 		newL := make([]chunk.Region[model.NbtHasText], 0)
@@ -51,11 +52,18 @@ func main() {
 				newL = append(newL, l[i])
 			}
 		}
-		b, err := json.Marshal(newL)
+		f, err := os.Create("data.json")
 		if err != nil {
 			panic(err)
 		}
-		os.WriteFile("data1.json", b, 0700)
+		defer f.Close()
+		en := json.NewEncoder(f)
+		en.SetEscapeHTML(false)
+		en.SetIndent("", "    ")
+		err = en.Encode(newL)
+		if err != nil {
+			panic(err)
+		}
 	case "2":
 		bb, err := os.ReadFile("data.json")
 		if err != nil {
@@ -87,6 +95,7 @@ func main() {
 		}
 
 	}
+	fmt.Println("完成")
 	bs.Scan()
 }
 
@@ -111,6 +120,17 @@ func getForDataDir(cxt context.Context, dirname string) ([]chunk.Region[model.Nb
 			f := f
 			name := f.Name()
 			if f.IsDir() || filepath.Ext(name) != ".mca" {
+				continue
+			}
+			info, err := f.Info()
+			if err != nil {
+				select {
+				case errCh <- fmt.Errorf("getForDataDir: %w", err):
+				case <-cxt.Done():
+				}
+				return
+			}
+			if info.Size() == 0 {
 				continue
 			}
 			w.Add(1)
