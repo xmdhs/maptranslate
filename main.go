@@ -20,7 +20,15 @@ func main() {
 	fmt.Println("你想要：")
 	fmt.Println("1. 读取方块实体和实体的 nbt 信息")
 	fmt.Println("2. 应用 json 文件到 nbt 中")
+	fmt.Print("> ")
 	bs.Scan()
+
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println(err)
+		}
+	}()
+
 	switch bs.Text() {
 	case "1":
 		cxt := context.Background()
