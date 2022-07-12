@@ -42,16 +42,7 @@ func main() {
 			fmt.Println(`entities`, err)
 		}
 		l = append(l, ll...)
-		newL := make([]chunk.Region[model.NbtHasText], 0)
-		for i := range l {
-			for ii := range l[i].Chunk {
-				chunk.ChunkRemoveNullSlice(&l[i].Chunk[ii].Data)
-			}
-			l[i].RemoveNull()
-			if len(l[i].Chunk) != 0 {
-				newL = append(newL, l[i])
-			}
-		}
+
 		f, err := os.Create("data.json")
 		if err != nil {
 			panic(err)
@@ -60,7 +51,7 @@ func main() {
 		en := json.NewEncoder(f)
 		en.SetEscapeHTML(false)
 		en.SetIndent("", "    ")
-		err = en.Encode(newL)
+		err = en.Encode(l)
 		if err != nil {
 			panic(err)
 		}
@@ -99,13 +90,13 @@ func main() {
 	bs.Scan()
 }
 
-func getForDataDir(cxt context.Context, dirname string) ([]chunk.Region[model.NbtHasText], error) {
+func getForDataDir(cxt context.Context, dirname string) ([]chunk.Region[map[string]string], error) {
 	dir, err := os.ReadDir(dirname)
 	if err != nil {
 		return nil, fmt.Errorf("getForDataDir: %w", err)
 	}
-	cl := make([]chunk.Region[model.NbtHasText], 0)
-	clCh := make(chan chunk.Region[model.NbtHasText], 50)
+	cl := make([]chunk.Region[map[string]string], 0)
+	clCh := make(chan chunk.Region[map[string]string], 50)
 	errCh := make(chan error, 10)
 
 	numcpu := runtime.NumCPU()

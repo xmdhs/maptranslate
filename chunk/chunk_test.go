@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"testing"
+
+	"github.com/xmdhs/maptranslate/model"
 )
 
 func TestBlockPos2Mca(t *testing.T) {
@@ -86,4 +89,58 @@ func TestPaseMca(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Println(string(bb))
+}
+
+func Test_getStrPath(t *testing.T) {
+	type args struct {
+		v    any
+		path string
+	}
+	tests := []struct {
+		name string
+		args args
+		want map[string]string
+	}{
+		{
+			name: "1",
+			args: args{
+				v: model.NbtHasText{
+					Level: model.Level{
+						Entities: map[string]any{
+							"aaa": 12,
+							"bbb": "bbb",
+							"map": map[string]any{
+								"ccc": 42,
+								"ddd": "42",
+							},
+						},
+					},
+					Entities: []any{
+						map[string]any{
+							"ccc": 42,
+							"sss": "42",
+						},
+						map[string]any{
+							"ccc":  42,
+							"3333": "42",
+						},
+					},
+				},
+				path: "",
+			},
+			want: map[string]string{
+				"Level.Entities.bbb":     "bbb",
+				"Level.Entities.map.ddd": "42",
+				"Entities[0].sss":        "42",
+				"Entities[1].3333":       "42",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getStrPath(tt.args.v, tt.args.path); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("getStrPath() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

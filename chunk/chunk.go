@@ -9,18 +9,19 @@ import (
 	"io"
 	"math"
 	"reflect"
+	"strconv"
 
 	"github.com/Tnze/go-mc/nbt"
 	"github.com/Tnze/go-mc/save/region"
 )
 
-func PaseMca[K any](f io.ReadWriteSeeker, filePath string) (Region[K], error) {
+func PaseMca[K any](f io.ReadWriteSeeker, filePath string) (Region[map[string]string], error) {
 	rg, err := region.Load(f)
 	if err != nil {
-		return Region[K]{}, fmt.Errorf("PaseMca: %w", err)
+		return Region[map[string]string]{}, fmt.Errorf("PaseMca: %w", err)
 	}
 	defer rg.Close()
-	cl := make([]Chunk[K], 0)
+	cl := make([]Chunk[map[string]string], 0)
 	for x := 0; x < 32; x++ {
 		for y := 0; y < 32; y++ {
 			if !rg.ExistSector(x, y) {
@@ -28,25 +29,25 @@ func PaseMca[K any](f io.ReadWriteSeeker, filePath string) (Region[K], error) {
 			}
 			b, err := rg.ReadSector(x, y)
 			if err != nil {
-				return Region[K]{}, fmt.Errorf("PaseMca: %w", err)
+				return Region[map[string]string]{}, fmt.Errorf("PaseMca: %w", err)
 			}
 			b, err = mcDecompress(b)
 			if err != nil {
-				return Region[K]{}, fmt.Errorf("PaseMca: %w", err)
+				return Region[map[string]string]{}, fmt.Errorf("PaseMca: %w", err)
 			}
 			var v K
 			err = nbt.Unmarshal(b, &v)
 			if err != nil {
-				return Region[K]{}, fmt.Errorf("PaseMca: %w", err)
+				return Region[map[string]string]{}, fmt.Errorf("PaseMca: %w", err)
 			}
-			cl = append(cl, Chunk[K]{
+			cl = append(cl, Chunk[map[string]string]{
 				X:    x,
 				Z:    y,
-				Data: v,
+				Data: getStrPath(v, ""),
 			})
 		}
 	}
-	return Region[K]{
+	return Region[map[string]string]{
 		FilePath: filePath,
 		Chunk:    cl,
 	}, nil
@@ -110,39 +111,36 @@ type Region[K any] struct {
 	Chunk    []Chunk[K] `json:",omitempty"`
 }
 
-func (r *Region[K]) RemoveNull() {
-	newChunk := []Chunk[K]{}
-	for _, v := range r.Chunk {
-		if !reflect.ValueOf(v.Data).IsZero() {
-			newChunk = append(newChunk, v)
-		}
-	}
-	r.Chunk = newChunk
-
-}
-
 type Chunk[K any] struct {
 	X    int
 	Z    int
 	Data K
 }
 
-func ChunkRemoveNullSlice(v any) {
+func getStrPath(v any, path string) map[string]string {
 	dt := reflect.TypeOf(v)
-	if dt.Kind() != reflect.Pointer {
-		panic("not Pointer")
-	}
-	dv := reflect.ValueOf(v).Elem()
+	dv := reflect.ValueOf(v)
 	if dv.Kind() != reflect.Struct {
-		return
+		panic("nor struct")
 	}
-	l := reflect.VisibleFields(dt.Elem())
+	l := reflect.VisibleFields(dt)
+	sm := make(map[string]string)
 
-	needDel := [][]int{}
 	for _, t := range l {
 		v := dv.FieldByIndex(t.Index)
+
+		nPath := ""
+		if path == "" {
+			nPath = t.Name
+		} else {
+			nPath = path + "." + t.Name
+		}
+
 		if v.Kind() == reflect.Struct {
-			ChunkRemoveNullSlice(v.Addr().Interface())
+			m := getStrPath(v.Interface(), t.Name)
+			for k, v := range m {
+				sm[k] = v
+			}
 			continue
 		}
 
@@ -150,16 +148,43 @@ func ChunkRemoveNullSlice(v any) {
 			continue
 		}
 		v = v.Elem()
-
-		if v.Kind() != reflect.Slice {
-			continue
+		m, ok := mapify(v.Interface())
+		if ok {
+			getStrPathMap(m, nPath, &sm)
 		}
-		if v.Len() == 0 {
-			needDel = append(needDel, t.Index)
+		if v.Kind() == reflect.Slice {
+			getStrPathSlice(v.Interface().([]any), nPath, &sm)
 		}
 	}
-	for _, v := range needDel {
-		v := dv.FieldByIndex(v)
-		v.Set(reflect.Zero(v.Type()))
+	return sm
+}
+
+func getStrPathMap(m map[string]any, path string, sm *map[string]string) {
+	for k, v := range m {
+		rt := reflect.TypeOf(v)
+		rk := rt.Kind()
+		switch rk {
+		case reflect.Slice:
+			getStrPathSlice(v.([]any), path+"."+k, sm)
+		case reflect.Map:
+			getStrPathMap(v.(map[string]any), path+"."+k, sm)
+		case reflect.String:
+			(*sm)[path+"."+k] = v.(string)
+		}
+	}
+}
+
+func getStrPathSlice(l []any, path string, sm *map[string]string) {
+	for i, v := range l {
+		rt := reflect.TypeOf(v)
+		rk := rt.Kind()
+		switch rk {
+		case reflect.Slice:
+			getStrPathSlice(v.([]any), path+"["+strconv.Itoa(i)+"]", sm)
+		case reflect.Map:
+			getStrPathMap(v.(map[string]any), path+"["+strconv.Itoa(i)+"]", sm)
+		case reflect.String:
+			(*sm)[path+"["+strconv.Itoa(i)+"]"] = v.(string)
+		}
 	}
 }
