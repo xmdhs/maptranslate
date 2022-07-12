@@ -64,6 +64,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+		fmt.Println("完成，已写入 data.json")
 	case "2":
 		bb, err := os.ReadFile("data.json")
 		if err != nil {
@@ -93,9 +94,8 @@ func main() {
 				i = 0
 			}
 		}
-
+		fmt.Println("完成")
 	}
-	fmt.Println("完成")
 	bs.Scan()
 }
 
