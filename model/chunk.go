@@ -1,8 +1,12 @@
 package model
 
 type NbtHasText struct {
-	Entities      interface{} `nbt:"Entities" json:"Entities,omitempty"`
+	Level         level
 	BlockEntities interface{} `nbt:"block_entities" json:"block_entities,omitempty"`
-	Entities1     interface{} `nbt:"entities" json:"entities,omitempty"`
-	TileEntities  interface{} `nbt:"TileEntities" json:"TileEntities,omitempty"`
+	Entities      interface{} `nbt:"entities" json:"entities,omitempty"`
+}
+
+type level struct {
+	Entities     interface{} `nbt:"Entities" json:"Entities,omitempty"`
+	TileEntities interface{} `nbt:"TileEntities" json:"TileEntities,omitempty"`
 }

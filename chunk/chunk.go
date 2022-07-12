@@ -110,30 +110,30 @@ type Chunk[K any] struct {
 	Data K
 }
 
-func (c *Chunk[K]) RemoveNull() {
-	dv := reflect.ValueOf(&c.Data).Elem()
+func ChunkRemoveNullSlice(v any) {
+	dt := reflect.TypeOf(v)
+	if dt.Kind() != reflect.Pointer {
+		panic("not Pointer")
+	}
+	dv := reflect.ValueOf(v).Elem()
 	if dv.Kind() != reflect.Struct {
 		return
 	}
-	dt := reflect.TypeOf(c.Data)
-	l := reflect.VisibleFields(dt)
-
-	anyListType := reflect.TypeOf([]any{})
+	l := reflect.VisibleFields(dt.Elem())
 
 	needDel := [][]int{}
 	for _, t := range l {
 		v := dv.FieldByIndex(t.Index)
+		fmt.Println(t.Name)
+		if v.Kind() == reflect.Struct {
+			ChunkRemoveNullSlice(v.Addr().Interface())
+			continue
+		}
 
 		if v.Kind() != reflect.Interface || v.IsNil() {
 			continue
 		}
 		v = v.Elem()
-
-		if !v.CanConvert(anyListType) {
-			continue
-		}
-
-		v = v.Convert(anyListType)
 
 		if v.Kind() != reflect.Slice {
 			continue

@@ -16,14 +16,14 @@ import (
 func main() {
 	cxt := context.Background()
 
-	l, err := getForDataDir(cxt, "region")
+	l, err := getForDataDir(cxt, `region`)
 	if err != nil {
 		panic(err)
 	}
 	newL := make([]chunk.Region[model.NbtHasText], 0)
 	for i := range l {
 		for ii := range l[i].Chunk {
-			l[i].Chunk[ii].RemoveNull()
+			chunk.ChunkRemoveNullSlice(&l[i].Chunk[ii].Data)
 		}
 		l[i].RemoveNull()
 		if len(l[i].Chunk) != 0 {
