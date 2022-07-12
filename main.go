@@ -14,9 +14,24 @@ import (
 )
 
 func main() {
+	bb, err := os.ReadFile("data.json")
+	if err != nil {
+		panic(err)
+	}
+	list := []chunk.Region[model.NbtHasText]{}
+	err = json.Unmarshal(bb, &list)
+	if err != nil {
+		panic(err)
+	}
+
+	err = chunk.WriteChunk(list[0])
+	if err != nil {
+		panic(err)
+	}
+
 	cxt := context.Background()
 
-	l, err := getForDataDir(cxt, `region`)
+	l, err := getForDataDir(cxt, `chunk`)
 	if err != nil {
 		panic(err)
 	}
@@ -34,7 +49,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	os.WriteFile("data.json", b, 0700)
+	os.WriteFile("data1.json", b, 0700)
 }
 
 func getForDataDir(cxt context.Context, dirname string) ([]chunk.Region[model.NbtHasText], error) {
@@ -56,14 +71,15 @@ func getForDataDir(cxt context.Context, dirname string) ([]chunk.Region[model.Nb
 		w := sync.WaitGroup{}
 		for _, f := range dir {
 			f := f
-			if f.IsDir() {
+			name := f.Name()
+			if f.IsDir() || filepath.Ext(name) != ".mca" {
 				continue
 			}
 			w.Add(1)
 			i++
 			go func() {
 				defer w.Done()
-				path := filepath.Join(dirname, f.Name())
+				path := filepath.Join(dirname, name)
 				f, err := os.Open(path)
 				if err != nil {
 					select {

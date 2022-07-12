@@ -19,6 +19,7 @@ func PaseMca[K any](f io.ReadWriteSeeker, filePath string) (Region[K], error) {
 	if err != nil {
 		return Region[K]{}, fmt.Errorf("PaseMca: %w", err)
 	}
+	defer rg.Close()
 	cl := make([]Chunk[K], 0)
 	for x := 0; x < 32; x++ {
 		for y := 0; y < 32; y++ {
@@ -83,6 +84,22 @@ func mcDecompress(data []byte) ([]byte, error) {
 	return b, nil
 }
 
+func mcEncompress(data []byte) ([]byte, error) {
+	bf := &bytes.Buffer{}
+	bf.WriteByte(2)
+	zw := zlib.NewWriter(bf)
+	defer zw.Close()
+	_, err := zw.Write(data)
+	if err != nil {
+		return nil, fmt.Errorf("mcEncompress: %w", err)
+	}
+	err = zw.Close()
+	if err != nil {
+		return nil, fmt.Errorf("mcEncompress: %w", err)
+	}
+	return bf.Bytes(), nil
+}
+
 var (
 	ErrInvalidChunk       = errors.New("invalid chunk")
 	ErrUnKnownCompression = errors.New("unknown compression")
@@ -124,7 +141,6 @@ func ChunkRemoveNullSlice(v any) {
 	needDel := [][]int{}
 	for _, t := range l {
 		v := dv.FieldByIndex(t.Index)
-		fmt.Println(t.Name)
 		if v.Kind() == reflect.Struct {
 			ChunkRemoveNullSlice(v.Addr().Interface())
 			continue
