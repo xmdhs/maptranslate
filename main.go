@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,42 +15,71 @@ import (
 )
 
 func main() {
-	bb, err := os.ReadFile("data.json")
-	if err != nil {
-		panic(err)
-	}
-	list := []chunk.Region[model.NbtHasText]{}
-	err = json.Unmarshal(bb, &list)
-	if err != nil {
-		panic(err)
-	}
+	bs := bufio.NewScanner(os.Stdin)
 
-	err = chunk.WriteChunk(list[0])
-	if err != nil {
-		panic(err)
-	}
-
-	cxt := context.Background()
-
-	l, err := getForDataDir(cxt, `chunk`)
-	if err != nil {
-		panic(err)
-	}
-	newL := make([]chunk.Region[model.NbtHasText], 0)
-	for i := range l {
-		for ii := range l[i].Chunk {
-			chunk.ChunkRemoveNullSlice(&l[i].Chunk[ii].Data)
+	fmt.Println("你想要：")
+	fmt.Println("1. 读取方块实体和实体的 nbt 信息")
+	fmt.Println("2. 应用 json 文件到 nbt 中")
+	bs.Scan()
+	switch bs.Text() {
+	case "1":
+		cxt := context.Background()
+		l, err := getForDataDir(cxt, `region`)
+		if err != nil {
+			panic(err)
 		}
-		l[i].RemoveNull()
-		if len(l[i].Chunk) != 0 {
-			newL = append(newL, l[i])
+		ll, err := getForDataDir(cxt, `entities`)
+		if err != nil {
+			panic(err)
 		}
+		l = append(l, ll...)
+		newL := make([]chunk.Region[model.NbtHasText], 0)
+		for i := range l {
+			for ii := range l[i].Chunk {
+				chunk.ChunkRemoveNullSlice(&l[i].Chunk[ii].Data)
+			}
+			l[i].RemoveNull()
+			if len(l[i].Chunk) != 0 {
+				newL = append(newL, l[i])
+			}
+		}
+		b, err := json.Marshal(newL)
+		if err != nil {
+			panic(err)
+		}
+		os.WriteFile("data1.json", b, 0700)
+	case "2":
+		bb, err := os.ReadFile("data.json")
+		if err != nil {
+			panic(err)
+		}
+		list := []chunk.Region[model.NbtHasText]{}
+		err = json.Unmarshal(bb, &list)
+		if err != nil {
+			panic(err)
+		}
+		i := 0
+		w := sync.WaitGroup{}
+		numcpu := runtime.NumCPU()
+
+		for _, v := range list {
+			i++
+			w.Add(1)
+			v := v
+			go func() {
+				err := chunk.WriteChunk(v)
+				if err != nil {
+					panic(err)
+				}
+			}()
+			if i > numcpu {
+				w.Wait()
+				i = 0
+			}
+		}
+
 	}
-	b, err := json.Marshal(newL)
-	if err != nil {
-		panic(err)
-	}
-	os.WriteFile("data1.json", b, 0700)
+	bs.Scan()
 }
 
 func getForDataDir(cxt context.Context, dirname string) ([]chunk.Region[model.NbtHasText], error) {
