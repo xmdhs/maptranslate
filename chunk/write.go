@@ -3,13 +3,17 @@ package chunk
 import (
 	"errors"
 	"fmt"
+	"reflect"
+	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/Tnze/go-mc/nbt"
 	"github.com/Tnze/go-mc/save/region"
-	"github.com/mitchellh/mapstructure"
+	"github.com/stretchr/objx"
 )
 
-func WriteChunk[K any](d Region[K]) error {
+func WriteChunk(d Region[map[string]string]) error {
 	rg, err := region.Open(d.FilePath)
 	if err != nil {
 		return fmt.Errorf("WriteChunk: %w", err)
@@ -58,25 +62,32 @@ func WriteChunk[K any](d Region[K]) error {
 	return nil
 }
 
-func merge(dst *map[string]any, src any) error {
-	anym := map[string]any{}
-	d, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		TagName: "json",
-		Result:  any(&anym),
-	})
+var reg = regexp.MustCompile(`\[(\d*)\]$`)
 
-	if err != nil {
-		return fmt.Errorf("merga: %w", err)
+func merge(dst *map[string]any, src map[string]string) error {
+	m := objx.New(*dst)
+	for k, v := range src {
+		if strings.HasSuffix(k, "]") {
+			sl := reg.FindStringSubmatch(k)
+			i, err := strconv.Atoi(sl[1])
+			if err != nil {
+				panic(err)
+			}
+			nk := reg.ReplaceAllString(k, "")
+			data := m.Get(nk).Data()
+			setList(&data, i, v)
+			m = m.Set(nk, data)
+			continue
+		}
+		m = m.Set(k, v)
 	}
-
-	err = d.Decode(src)
-	if err != nil {
-		return fmt.Errorf("merga: %w", err)
-	}
-	delKey(&anym)
-
-	*dst = tomerge(*dst, anym, 0)
+	*dst = (map[string]any)(m)
 	return nil
+}
+
+func setList(data any, index int, v any) {
+	vv := reflect.ValueOf(data).Elem().Elem()
+	vv.Index(index).Set(reflect.ValueOf(v))
 }
 
 type ErrNotExistSector struct {

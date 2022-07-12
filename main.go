@@ -15,6 +15,7 @@ import (
 )
 
 func main() {
+	//bs := bufio.NewScanner(strings.NewReader("2\n"))
 	bs := bufio.NewScanner(os.Stdin)
 
 	fmt.Println("你想要：")
@@ -43,6 +44,14 @@ func main() {
 		}
 		l = append(l, ll...)
 
+		newL := []chunk.Region[map[string]string]{}
+		for _, v := range l {
+			v.RemoveNull()
+			if len(v.Chunk) != 0 {
+				newL = append(newL, v)
+			}
+		}
+
 		f, err := os.Create("data.json")
 		if err != nil {
 			panic(err)
@@ -51,17 +60,18 @@ func main() {
 		en := json.NewEncoder(f)
 		en.SetEscapeHTML(false)
 		en.SetIndent("", "    ")
-		err = en.Encode(l)
+		err = en.Encode(newL)
 		if err != nil {
 			panic(err)
 		}
+		f.Close()
 		fmt.Println("完成，已写入 data.json")
 	case "2":
 		bb, err := os.ReadFile("data.json")
 		if err != nil {
 			panic(err)
 		}
-		list := []chunk.Region[model.NbtHasText]{}
+		list := []chunk.Region[map[string]string]{}
 		err = json.Unmarshal(bb, &list)
 		if err != nil {
 			panic(err)
@@ -79,12 +89,14 @@ func main() {
 				if err != nil {
 					panic(err)
 				}
+				w.Done()
 			}()
 			if i > numcpu {
 				w.Wait()
 				i = 0
 			}
 		}
+		w.Wait()
 		fmt.Println("完成")
 	}
 	bs.Scan()

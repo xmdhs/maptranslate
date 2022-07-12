@@ -111,6 +111,17 @@ type Region[K any] struct {
 	Chunk    []Chunk[K] `json:",omitempty"`
 }
 
+func (r *Region[K]) RemoveNull() {
+	newChunk := []Chunk[K]{}
+	for _, v := range r.Chunk {
+		vv := reflect.ValueOf(v.Data)
+		if !vv.IsZero() && vv.Len() != 0 {
+			newChunk = append(newChunk, v)
+		}
+	}
+	r.Chunk = newChunk
+}
+
 type Chunk[K any] struct {
 	X    int
 	Z    int
@@ -135,7 +146,6 @@ func getStrPath(v any, path string) map[string]string {
 		} else {
 			nPath = path + "." + t.Name
 		}
-
 		if v.Kind() == reflect.Struct {
 			m := getStrPath(v.Interface(), t.Name)
 			for k, v := range m {
@@ -153,7 +163,7 @@ func getStrPath(v any, path string) map[string]string {
 			getStrPathMap(m, nPath, &sm)
 		}
 		if v.Kind() == reflect.Slice {
-			getStrPathSlice(v.Interface().([]any), nPath, &sm)
+			getStrPathSlice(v.Interface(), nPath, &sm)
 		}
 	}
 	return sm
@@ -165,7 +175,7 @@ func getStrPathMap(m map[string]any, path string, sm *map[string]string) {
 		rk := rt.Kind()
 		switch rk {
 		case reflect.Slice:
-			getStrPathSlice(v.([]any), path+"."+k, sm)
+			getStrPathSlice(v, path+"."+k, sm)
 		case reflect.Map:
 			getStrPathMap(v.(map[string]any), path+"."+k, sm)
 		case reflect.String:
@@ -174,17 +184,22 @@ func getStrPathMap(m map[string]any, path string, sm *map[string]string) {
 	}
 }
 
-func getStrPathSlice(l []any, path string, sm *map[string]string) {
-	for i, v := range l {
-		rt := reflect.TypeOf(v)
-		rk := rt.Kind()
-		switch rk {
+func getStrPathSlice(l any, path string, sm *map[string]string) {
+	rl := reflect.ValueOf(l)
+	rlen := rl.Len()
+
+	for i := 0; i < rlen; i++ {
+		ri := rl.Index(i)
+		if ri.Kind() == reflect.Interface {
+			ri = ri.Elem()
+		}
+		switch ri.Kind() {
 		case reflect.Slice:
-			getStrPathSlice(v.([]any), path+"["+strconv.Itoa(i)+"]", sm)
+			getStrPathSlice(ri.Interface(), path+"["+strconv.Itoa(i)+"]", sm)
 		case reflect.Map:
-			getStrPathMap(v.(map[string]any), path+"["+strconv.Itoa(i)+"]", sm)
+			getStrPathMap(ri.Interface().(map[string]any), path+"["+strconv.Itoa(i)+"]", sm)
 		case reflect.String:
-			(*sm)[path+"["+strconv.Itoa(i)+"]"] = v.(string)
+			(*sm)[path+"["+strconv.Itoa(i)+"]"] = ri.Interface().(string)
 		}
 	}
 }
