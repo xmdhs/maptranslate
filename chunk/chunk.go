@@ -10,6 +10,7 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"github.com/Tnze/go-mc/nbt"
 	"github.com/Tnze/go-mc/save/region"
@@ -139,15 +140,24 @@ func getStrPath(v any, path string) map[string]string {
 
 	for _, t := range l {
 		v := dv.FieldByIndex(t.Index)
+		name := t.Name
+
+		if v, ok := t.Tag.Lookup("json"); ok {
+			l := strings.Split(v, ",")
+			if len(l) != 0 {
+				v = l[0]
+			}
+			name = v
+		}
 
 		nPath := ""
 		if path == "" {
-			nPath = t.Name
+			nPath = name
 		} else {
-			nPath = path + "." + t.Name
+			nPath = path + "." + name
 		}
 		if v.Kind() == reflect.Struct {
-			m := getStrPath(v.Interface(), t.Name)
+			m := getStrPath(v.Interface(), name)
 			for k, v := range m {
 				sm[k] = v
 			}
