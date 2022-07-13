@@ -82,12 +82,13 @@ func main() {
 	case "3":
 		l := regionList2LangList(readDatajson[[]chunk.Region[[]chunk.Entities]]("data.json"))
 		wirteJson("lang.json", l)
-
+		fmt.Println("完成")
 	case "4":
 		list := readDatajson[[]chunk.Region[[]chunk.Entities]]("data.json")
 		langL := readDatajson[[]Lang]("lang.json")
 		useLangList(langL, &list)
 		wirteJson("data.json", list)
+		fmt.Println("完成")
 	}
 	bs.Scan()
 }
