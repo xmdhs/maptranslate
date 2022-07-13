@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/xmdhs/maptranslate/chunk"
@@ -15,12 +16,14 @@ import (
 )
 
 func main() {
-	//bs := bufio.NewScanner(strings.NewReader("1\n"))
-	bs := bufio.NewScanner(os.Stdin)
+	bs := bufio.NewScanner(strings.NewReader("4\n"))
+	//bs := bufio.NewScanner(os.Stdin)
 
 	fmt.Println("你想要：")
 	fmt.Println("1. 读取方块实体和实体的 nbt 信息")
 	fmt.Println("2. 应用 json 文件到 nbt 中")
+	fmt.Println("3. data.json 转换成 lang.json （相同文本合并）")
+	fmt.Println("4. lang.json 转 data.json")
 	fmt.Print("> ")
 	bs.Scan()
 
@@ -51,31 +54,10 @@ func main() {
 				newL = append(newL, v)
 			}
 		}
-
-		f, err := os.Create("data.json")
-		if err != nil {
-			panic(err)
-		}
-		defer f.Close()
-		en := json.NewEncoder(f)
-		en.SetEscapeHTML(false)
-		en.SetIndent("", "    ")
-		err = en.Encode(newL)
-		if err != nil {
-			panic(err)
-		}
-		f.Close()
+		wirteJson("data.json", newL)
 		fmt.Println("完成，已写入 data.json")
 	case "2":
-		bb, err := os.ReadFile("data.json")
-		if err != nil {
-			panic(err)
-		}
-		list := []chunk.Region[[]chunk.Entities]{}
-		err = json.Unmarshal(bb, &list)
-		if err != nil {
-			panic(err)
-		}
+		list := readDatajson[[]chunk.Region[[]chunk.Entities]]("data.json")
 		i := 0
 		w := sync.WaitGroup{}
 		numcpu := runtime.NumCPU()
@@ -98,8 +80,30 @@ func main() {
 		}
 		w.Wait()
 		fmt.Println("完成")
+	case "3":
+		l := regionList2LangList(readDatajson[[]chunk.Region[[]chunk.Entities]]("data.json"))
+		wirteJson("lang.json", l)
+
+	case "4":
+		list := readDatajson[[]chunk.Region[[]chunk.Entities]]("data.json")
+		langL := readDatajson[[]Lang]("lang.json")
+		useLangList(langL, &list)
+		wirteJson("data.json", list)
 	}
 	bs.Scan()
+}
+
+func readDatajson[K any](path string) K {
+	bb, err := os.ReadFile(path)
+	if err != nil {
+		panic(err)
+	}
+	var v K
+	err = json.Unmarshal(bb, &v)
+	if err != nil {
+		panic(err)
+	}
+	return v
 }
 
 func getForDataDir(cxt context.Context, dirname string) ([]chunk.Region[[]chunk.Entities], error) {
@@ -186,5 +190,20 @@ func getForDataDir(cxt context.Context, dirname string) ([]chunk.Region[[]chunk.
 		case err := <-errCh:
 			return nil, err
 		}
+	}
+}
+
+func wirteJson(filename string, v any) {
+	f, err := os.Create(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	en := json.NewEncoder(f)
+	en.SetEscapeHTML(false)
+	en.SetIndent("", "    ")
+	err = en.Encode(v)
+	if err != nil {
+		panic(err)
 	}
 }
