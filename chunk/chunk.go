@@ -144,7 +144,7 @@ func getStrPath(v any, path string) map[string]string {
 
 		if v, ok := t.Tag.Lookup("json"); ok {
 			l := strings.Split(v, ",")
-			if len(l) != 0 && l[0] != "" {
+			if len(l) != 0 {
 				v = l[0]
 			}
 			name = v
