@@ -236,7 +236,7 @@ func getStrPathSlice(l any, path string, sm *map[string]string) {
 
 type Entities struct {
 	UUID string            `json:",omitempty"`
-	POS  [3]int            `json:",omitempty"`
+	POS  []int             `json:",omitempty"`
 	PATH map[string]string `json:",omitempty"`
 	Root string            `json:",omitempty"`
 }
@@ -251,6 +251,7 @@ func getEntitiesForMap(m map[string]any, path string) (Entities, error) {
 	e.UUID = uuid
 
 	if v, ok := m["x"]; ok {
+		e.POS = make([]int, 3)
 		e.POS[0] = int(v.(int32))
 	}
 	if v, ok := m["y"]; ok {

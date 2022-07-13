@@ -16,7 +16,7 @@ import (
 )
 
 func main() {
-	bs := bufio.NewScanner(strings.NewReader("2\n"))
+	bs := bufio.NewScanner(strings.NewReader("1\n"))
 	//bs := bufio.NewScanner(os.Stdin)
 
 	fmt.Println("你想要：")
