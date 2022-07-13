@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/xmdhs/maptranslate/chunk"
@@ -15,8 +16,8 @@ import (
 )
 
 func main() {
-	//bs := bufio.NewScanner(strings.NewReader("2\n"))
-	bs := bufio.NewScanner(os.Stdin)
+	bs := bufio.NewScanner(strings.NewReader("2\n"))
+	//bs := bufio.NewScanner(os.Stdin)
 
 	fmt.Println("你想要：")
 	fmt.Println("1. 读取方块实体和实体的 nbt 信息")
@@ -34,7 +35,7 @@ func main() {
 	switch bs.Text() {
 	case "1":
 		cxt := context.Background()
-		l, err := getForDataDir(cxt, `region`)
+		l, err := getForDataDir(cxt, `chunk`)
 		if err != nil {
 			fmt.Println(`region`, err)
 		}
@@ -44,7 +45,7 @@ func main() {
 		}
 		l = append(l, ll...)
 
-		newL := []chunk.Region[map[string]string]{}
+		newL := []chunk.Region[[]chunk.Entities]{}
 		for _, v := range l {
 			v.RemoveNull()
 			if len(v.Chunk) != 0 {
@@ -71,7 +72,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		list := []chunk.Region[map[string]string]{}
+		list := []chunk.Region[[]chunk.Entities]{}
 		err = json.Unmarshal(bb, &list)
 		if err != nil {
 			panic(err)
@@ -102,13 +103,13 @@ func main() {
 	bs.Scan()
 }
 
-func getForDataDir(cxt context.Context, dirname string) ([]chunk.Region[map[string]string], error) {
+func getForDataDir(cxt context.Context, dirname string) ([]chunk.Region[[]chunk.Entities], error) {
 	dir, err := os.ReadDir(dirname)
 	if err != nil {
 		return nil, fmt.Errorf("getForDataDir: %w", err)
 	}
-	cl := make([]chunk.Region[map[string]string], 0)
-	clCh := make(chan chunk.Region[map[string]string], 50)
+	cl := make([]chunk.Region[[]chunk.Entities], 0)
+	clCh := make(chan chunk.Region[[]chunk.Entities], 50)
 	errCh := make(chan error, 10)
 
 	numcpu := runtime.NumCPU()

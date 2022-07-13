@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/objx"
 )
 
-func WriteChunk(d Region[map[string]string]) error {
+func WriteChunk(d Region[[]Entities]) error {
 	rg, err := region.Open(d.FilePath)
 	if err != nil {
 		return fmt.Errorf("WriteChunk: %w", err)
@@ -27,7 +27,6 @@ func WriteChunk(d Region[map[string]string]) error {
 				Z:        v.Z,
 				FilePath: d.FilePath,
 			})
-
 		}
 		b, err := rg.ReadSector(v.X, v.Z)
 		if err != nil {
@@ -64,20 +63,41 @@ func WriteChunk(d Region[map[string]string]) error {
 
 var reg = regexp.MustCompile(`\[(\d*)\]$`)
 
-func merge(dst *map[string]any, src map[string]string) error {
+func merge(dst *map[string]any, src []Entities) error {
+	m := objx.New(*dst)
+	for _, v := range src {
+		al := m.Get(v.Root).Data().([]any)
+		for i, vv := range al {
+			if !anyEqEntities(vv, v) {
+				continue
+			}
+			tm := vv.(map[string]any)
+			err := mergeMap(&tm, v.PATH)
+			if err != nil {
+				return fmt.Errorf("merge: %w", err)
+			}
+			al[i] = tm
+		}
+		m.Set(v.Root, al)
+	}
+	*dst = (map[string]any)(m)
+	return nil
+}
+
+func mergeMap(dst *map[string]any, src map[string]string) error {
 	m := objx.New(*dst)
 	for k, v := range src {
 		if strings.HasSuffix(k, "]") {
 			sl := reg.FindStringSubmatch(k)
 			i, err := strconv.Atoi(sl[1])
 			if err != nil {
-				return fmt.Errorf("merge: %w", err)
+				return fmt.Errorf("mergeMap: %w", err)
 			}
 			nk := reg.ReplaceAllString(k, "")
 			data := m.Get(nk).Data()
 			err = setList(&data, i, v)
 			if err != nil {
-				return fmt.Errorf("merge: %w", err)
+				return fmt.Errorf("mergeMap: %w", err)
 			}
 			m = m.Set(nk, data)
 			continue
@@ -113,3 +133,31 @@ func (e ErrNotExistSector) Error() string {
 }
 
 var ErrNotMap = errors.New("not map")
+
+func anyEqEntities(a any, e Entities) bool {
+	iseq := false
+
+	m := a.(map[string]any)
+
+	if v, ok := m["x"]; ok {
+		iseq = e.POS[0] == int(v.(int32))
+	}
+	if v, ok := m["y"]; ok && iseq {
+		iseq = e.POS[1] == int(v.(int32))
+	}
+	if v, ok := m["z"]; ok && iseq {
+		iseq = e.POS[2] == int(v.(int32))
+	}
+	if iseq {
+		return iseq
+	}
+
+	if e.UUID != "" {
+		uuid, err := getUUIDformap(m)
+		if err != nil {
+			panic(err)
+		}
+		return uuid == e.UUID
+	}
+	return false
+}

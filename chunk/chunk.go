@@ -16,16 +16,15 @@ import (
 
 	"github.com/Tnze/go-mc/nbt"
 	"github.com/Tnze/go-mc/save/region"
-	"github.com/xmdhs/maptranslate/model"
 )
 
-func PaseMca[K any](f io.ReadWriteSeeker, filePath string) (Region[map[string]Entities], error) {
+func PaseMca[K any](f io.ReadWriteSeeker, filePath string) (Region[[]Entities], error) {
 	rg, err := region.Load(f)
 	if err != nil {
-		return Region[map[string]Entities]{}, fmt.Errorf("PaseMca: %w", err)
+		return Region[[]Entities]{}, fmt.Errorf("PaseMca: %w", err)
 	}
 	defer rg.Close()
-	cl := make([]Chunk[map[string]Entities], 0)
+	cl := make([]Chunk[[]Entities], 0)
 	for x := 0; x < 32; x++ {
 		for y := 0; y < 32; y++ {
 			if !rg.ExistSector(x, y) {
@@ -33,30 +32,29 @@ func PaseMca[K any](f io.ReadWriteSeeker, filePath string) (Region[map[string]En
 			}
 			b, err := rg.ReadSector(x, y)
 			if err != nil {
-				return Region[map[string]Entities]{}, fmt.Errorf("PaseMca: %w", err)
+				return Region[[]Entities]{}, fmt.Errorf("PaseMca: %w", err)
 			}
 			b, err = mcDecompress(b)
 			if err != nil {
-				return Region[map[string]Entities]{}, fmt.Errorf("PaseMca: %w", err)
+				return Region[[]Entities]{}, fmt.Errorf("PaseMca: %w", err)
 			}
 			var v K
 			err = nbt.Unmarshal(b, &v)
 			if err != nil {
-				return Region[map[string]Entities]{}, fmt.Errorf("PaseMca: %w", err)
+				return Region[[]Entities]{}, fmt.Errorf("PaseMca: %w", err)
 			}
-			var pos model.NbtPosUUID
-			err = nbt.Unmarshal(b, &v)
+			el, err := getStrPath(v, "")
 			if err != nil {
-				return Region[map[string]Entities]{}, fmt.Errorf("PaseMca: %w", err)
+				return Region[[]Entities]{}, fmt.Errorf("PaseMca: %w", err)
 			}
-			cl = append(cl, Chunk[map[string]Entities]{
+			cl = append(cl, Chunk[[]Entities]{
 				X:    x,
 				Z:    y,
-				Data: getStrPath(v, "", pos),
+				Data: el,
 			})
 		}
 	}
-	return Region[map[string]Entities]{
+	return Region[[]Entities]{
 		FilePath: filePath,
 		Chunk:    cl,
 	}, nil
@@ -137,23 +135,23 @@ type Chunk[K any] struct {
 	Data K
 }
 
-func getStrPath(v any, path string, pos model.NbtPosUUID) map[string]Entities {
+func getStrPath(v any, path string) ([]Entities, error) {
 	dt := reflect.TypeOf(v)
 	dv := reflect.ValueOf(v)
 	if dv.Kind() != reflect.Struct {
-		panic("nor struct")
+		return nil, fmt.Errorf("getStrPath: %w", ErrNotStruct)
 	}
 	l := reflect.VisibleFields(dt)
-	sm := make(map[string]Entities)
+	sl := make([]Entities, 0)
 
 	for _, t := range l {
 		v := dv.FieldByIndex(t.Index)
 		name := t.Name
 
 		if v, ok := t.Tag.Lookup("json"); ok {
-			l := strings.Split(v, ",")
-			if len(l) != 0 {
-				v = l[0]
+			vv := strings.TrimSuffix(v, ",omitempty")
+			if vv != "" {
+				v = vv
 			}
 			name = v
 		}
@@ -165,10 +163,11 @@ func getStrPath(v any, path string, pos model.NbtPosUUID) map[string]Entities {
 			nPath = path + "." + name
 		}
 		if v.Kind() == reflect.Struct {
-			m := getStrPath(v.Interface(), name, pos)
-			for k, v := range m {
-				sm[k] = v
+			m, err := getStrPath(v.Interface(), name)
+			if err != nil {
+				return nil, err
 			}
+			sl = append(sl, m...)
 			continue
 		}
 
@@ -176,101 +175,132 @@ func getStrPath(v any, path string, pos model.NbtPosUUID) map[string]Entities {
 			continue
 		}
 		v = v.Elem()
-		m, ok := mapify(v.Interface())
-		if ok {
-			getStrPathMap(m, nPath, &sm, Entities{}, pos)
+		if v.Kind() != reflect.Slice {
+			return nil, fmt.Errorf("getStrPath: %w", ErrNotSlice)
 		}
-		if v.Kind() == reflect.Slice {
-			getStrPathSlice(v.Interface(), nPath, &sm, Entities{}, pos)
+		vlen := v.Len()
+		for i := 0; i < vlen; i++ {
+			m, ok := mapify(v.Index(i).Interface())
+			if !ok {
+				return nil, fmt.Errorf("getStrPath: %w", ErrNotMap)
+			}
+			v, err := getEntitiesForMap(m, nPath)
+			if err != nil {
+				return nil, fmt.Errorf("getStrPath: %w", err)
+			}
+			sl = append(sl, v)
 		}
+
 	}
-	return sm
+	return sl, nil
 }
 
-func getStrPathMap(m map[string]any, path string, sm *map[string]Entities, e Entities, pos model.NbtPosUUID) {
+func getStrPathMap(m map[string]any, path string, sm *map[string]string) {
 	for k, v := range m {
+		npath := k
+		if path != "" {
+			npath = path + "." + k
+		}
 		rt := reflect.TypeOf(v)
 		rk := rt.Kind()
 		switch rk {
 		case reflect.Slice:
-			getStrPathSlice(v, path+"."+k, sm, e, pos)
+			getStrPathSlice(v, npath, sm)
 		case reflect.Map:
-			getStrPathMap(v.(map[string]any), path+"."+k, sm, e, pos)
+			getStrPathMap(v.(map[string]any), npath, sm)
 		case reflect.String:
-			e.TEXT = v.(string)
-			(*sm)[path+"."+k] = e
+			(*sm)[npath] = v.(string)
 		}
 	}
 }
 
-func getStrPathSlice(l any, path string, sm *map[string]Entities, e Entities, pos model.NbtPosUUID) {
+func getStrPathSlice(l any, path string, sm *map[string]string) {
 	rl := reflect.ValueOf(l)
 	rlen := rl.Len()
-	needList := false
-	if strings.HasSuffix("Entities", path) || strings.HasSuffix("TileEntities", path) || strings.HasSuffix("block_entities", path) {
-		needList = true
-	}
 
 	for i := 0; i < rlen; i++ {
 		ri := rl.Index(i)
 		if ri.Kind() == reflect.Interface {
 			ri = ri.Elem()
 		}
-		if needList {
-			switch path {
-			case "Level.Entities":
-				e = posUUID2Ent(pos.Level.Entities[i])
-			case "Level.TileEntities":
-				e = posUUID2Ent(pos.Level.TileEntities[i])
-			case "block_entities":
-				e = posUUID2Ent(pos.BlockEntities[i])
-			case "Entities":
-				e = posUUID2Ent(pos.Entities[i])
-			}
-		}
 		switch ri.Kind() {
 		case reflect.Slice:
-			getStrPathSlice(ri.Interface(), path+"["+strconv.Itoa(i)+"]", sm, e, pos)
+			getStrPathSlice(ri.Interface(), path+"["+strconv.Itoa(i)+"]", sm)
 		case reflect.Map:
-			getStrPathMap(ri.Interface().(map[string]any), path+"["+strconv.Itoa(i)+"]", sm, e, pos)
+			getStrPathMap(ri.Interface().(map[string]any), path+"["+strconv.Itoa(i)+"]", sm)
 		case reflect.String:
-			e.TEXT = ri.Interface().(string)
-			(*sm)[path+"["+strconv.Itoa(i)+"]"] = e
+			(*sm)[path+"["+strconv.Itoa(i)+"]"] = ri.Interface().(string)
 		}
 	}
 }
 
 type Entities struct {
-	UUID string
-	POS  [3]int
-	TEXT string
+	UUID string            `json:",omitempty"`
+	POS  [3]int            `json:",omitempty"`
+	PATH map[string]string `json:",omitempty"`
+	Root string            `json:",omitempty"`
 }
 
-func posUUID2Ent(pos model.PosUUID) Entities {
+func getEntitiesForMap(m map[string]any, path string) (Entities, error) {
 	e := Entities{}
-	e.POS[0] = pos.X
-	e.POS[1] = pos.Y
-	e.POS[2] = pos.Z
-	if len(pos.UUID) != 0 {
-		bw := &bytes.Buffer{}
-		err := binary.Write(bw, binary.BigEndian, pos.UUID)
-		if err != nil {
-			panic(err)
-		}
-		e.UUID = hex.EncodeToString(bw.Bytes())
-	} else {
-		bw := &bytes.Buffer{}
-		err := binary.Write(bw, binary.BigEndian, pos.UUIDMost)
-		if err != nil {
-			panic(err)
-		}
-		err = binary.Write(bw, binary.BigEndian, pos.UUIDLeast)
-		if err != nil {
-			panic(err)
-		}
-		e.UUID = hex.EncodeToString(bw.Bytes())
 
+	uuid, err := getUUIDformap(m)
+	if err != nil {
+		return Entities{}, fmt.Errorf("getEntitiesForMap: %w", err)
+	}
+	e.UUID = uuid
+
+	if v, ok := m["x"]; ok {
+		e.POS[0] = int(v.(int32))
+	}
+	if v, ok := m["y"]; ok {
+		e.POS[1] = int(v.(int32))
+	}
+	if v, ok := m["z"]; ok {
+		e.POS[2] = int(v.(int32))
 	}
 
-	return e
+	sm := make(map[string]string)
+
+	getStrPathMap(m, "", &sm)
+	e.PATH = sm
+	e.Root = path
+
+	return e, nil
+}
+
+var (
+	ErrNBTUUID   = errors.New("错误的 uuid")
+	ErrNotStruct = errors.New("不是 struct")
+	ErrNotSlice  = errors.New("不是 slice")
+)
+
+func getUUIDformap(m map[string]any) (string, error) {
+	uuid := ""
+	if v, ok := m["UUID"]; ok {
+		bw := &bytes.Buffer{}
+		err := binary.Write(bw, binary.BigEndian, v.([]int32))
+		if err != nil {
+			return "", fmt.Errorf("getUUIDformap: %w", err)
+		}
+		uuid = hex.EncodeToString(bw.Bytes())
+	}
+
+	if ul, ok := m["UUIDLeast"]; ok {
+		um, ok := m["UUIDMost"]
+		if !ok {
+			return "", fmt.Errorf("getUUIDformap: %w", ErrNBTUUID)
+		}
+		bw := &bytes.Buffer{}
+		err := binary.Write(bw, binary.BigEndian, um)
+		if err != nil {
+			return "", fmt.Errorf("getUUIDformap: %w", err)
+		}
+		err = binary.Write(bw, binary.BigEndian, ul)
+		if err != nil {
+			return "", fmt.Errorf("getUUIDformap: %w", err)
+		}
+		uuid = hex.EncodeToString(bw.Bytes())
+	}
+	return uuid, nil
 }
