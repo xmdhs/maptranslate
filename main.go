@@ -34,7 +34,7 @@ func main() {
 	switch bs.Text() {
 	case "1":
 		cxt := context.Background()
-		l, err := getForDataDir(cxt, `chunk`)
+		l, err := getForDataDir(cxt, `region`)
 		if err != nil {
 			fmt.Println(`region`, err)
 		}
