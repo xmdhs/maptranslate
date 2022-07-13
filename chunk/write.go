@@ -66,12 +66,18 @@ var reg = regexp.MustCompile(`\[(\d*)\]$`)
 func merge(dst *map[string]any, src []Entities) error {
 	m := objx.New(*dst)
 	for _, v := range src {
-		al := m.Get(v.Root).Data().([]any)
+		al, ok := m.Get(v.Root).Data().([]any)
+		if !ok {
+			return fmt.Errorf("merge: %w", ErrNotSlice)
+		}
 		for i, vv := range al {
 			if !anyEqEntities(vv, v) {
 				continue
 			}
-			tm := vv.(map[string]any)
+			tm, ok := vv.(map[string]any)
+			if !ok {
+				return fmt.Errorf("merge: %w", ErrNotMap)
+			}
 			err := mergeMap(&tm, v.PATH)
 			if err != nil {
 				return fmt.Errorf("merge: %w", err)
@@ -113,6 +119,9 @@ func setList(data any, index int, v any) error {
 	for vv.Kind() == reflect.Pointer || vv.Kind() == reflect.Interface {
 		vv = vv.Elem()
 	}
+	if vv.Kind() != reflect.Slice {
+		return fmt.Errorf("setList: %w", ErrNotSlice)
+	}
 	if index >= vv.Len() {
 		return fmt.Errorf("setList: %w", ErrOutRange)
 	}
@@ -137,16 +146,31 @@ var ErrNotMap = errors.New("not map")
 func anyEqEntities(a any, e Entities) bool {
 	iseq := false
 
-	m := a.(map[string]any)
+	m, ok := a.(map[string]any)
+	if !ok {
+		return false
+	}
 
 	if v, ok := m["x"]; ok {
-		iseq = e.POS[0] == int(v.(int32))
+		x, ok := v.(int32)
+		if !ok {
+			return false
+		}
+		iseq = e.POS[0] == int(x)
 	}
 	if v, ok := m["y"]; ok && iseq {
-		iseq = e.POS[1] == int(v.(int32))
+		y, ok := v.(int32)
+		if !ok {
+			return false
+		}
+		iseq = e.POS[1] == int(y)
 	}
 	if v, ok := m["z"]; ok && iseq {
-		iseq = e.POS[2] == int(v.(int32))
+		z, ok := v.(int32)
+		if !ok {
+			return false
+		}
+		iseq = e.POS[2] == int(z)
 	}
 	if iseq {
 		return iseq

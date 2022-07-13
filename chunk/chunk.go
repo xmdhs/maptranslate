@@ -250,15 +250,33 @@ func getEntitiesForMap(m map[string]any, path string) (Entities, error) {
 	}
 	e.UUID = uuid
 
-	if v, ok := m["x"]; ok {
+	xv, xok := m["x"]
+	if xok {
 		e.POS = make([]int, 3)
-		e.POS[0] = int(v.(int32))
+		i, ok := xv.(int32)
+		if !ok {
+			return Entities{}, fmt.Errorf("getEntitiesForMap: %w", ErrNotInt32)
+		}
+		e.POS[0] = int(i)
 	}
-	if v, ok := m["y"]; ok {
-		e.POS[1] = int(v.(int32))
+	yv, yok := m["y"]
+	if yok {
+		i, ok := yv.(int32)
+		if !ok {
+			return Entities{}, fmt.Errorf("getEntitiesForMap: %w", ErrNotInt32)
+		}
+		e.POS[1] = int(i)
 	}
-	if v, ok := m["z"]; ok {
-		e.POS[2] = int(v.(int32))
+	zv, zok := m["z"]
+	if zok {
+		i, ok := zv.(int32)
+		if !ok {
+			return Entities{}, fmt.Errorf("getEntitiesForMap: %w", ErrNotInt32)
+		}
+		e.POS[2] = int(i)
+	}
+	if xok != yok || zok != xok || yok != zok {
+		return Entities{}, fmt.Errorf("getEntitiesForMap: %w", ErrPos)
 	}
 
 	sm := make(map[string]string)
@@ -274,13 +292,19 @@ var (
 	ErrNBTUUID   = errors.New("错误的 uuid")
 	ErrNotStruct = errors.New("不是 struct")
 	ErrNotSlice  = errors.New("不是 slice")
+	ErrNotInt32  = errors.New("不是 int32")
+	ErrPos       = errors.New("错误的坐标")
 )
 
 func getUUIDformap(m map[string]any) (string, error) {
 	uuid := ""
 	if v, ok := m["UUID"]; ok {
 		bw := &bytes.Buffer{}
-		err := binary.Write(bw, binary.BigEndian, v.([]int32))
+		i32l, ok := v.([]int32)
+		if !ok {
+			return "", fmt.Errorf("getUUIDformap: %w", ErrNotSlice)
+		}
+		err := binary.Write(bw, binary.BigEndian, i32l)
 		if err != nil {
 			return "", fmt.Errorf("getUUIDformap: %w", err)
 		}

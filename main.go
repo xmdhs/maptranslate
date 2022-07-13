@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 
 	"github.com/xmdhs/maptranslate/chunk"
@@ -16,8 +15,8 @@ import (
 )
 
 func main() {
-	bs := bufio.NewScanner(strings.NewReader("1\n"))
-	//bs := bufio.NewScanner(os.Stdin)
+	//bs := bufio.NewScanner(strings.NewReader("1\n"))
+	bs := bufio.NewScanner(os.Stdin)
 
 	fmt.Println("你想要：")
 	fmt.Println("1. 读取方块实体和实体的 nbt 信息")
