@@ -71,11 +71,14 @@ func merge(dst *map[string]any, src map[string]string) error {
 			sl := reg.FindStringSubmatch(k)
 			i, err := strconv.Atoi(sl[1])
 			if err != nil {
-				panic(err)
+				return fmt.Errorf("merge: %w", err)
 			}
 			nk := reg.ReplaceAllString(k, "")
 			data := m.Get(nk).Data()
-			setList(&data, i, v)
+			err = setList(&data, i, v)
+			if err != nil {
+				return fmt.Errorf("merge: %w", err)
+			}
 			m = m.Set(nk, data)
 			continue
 		}
@@ -85,10 +88,19 @@ func merge(dst *map[string]any, src map[string]string) error {
 	return nil
 }
 
-func setList(data any, index int, v any) {
-	vv := reflect.ValueOf(data).Elem().Elem()
+func setList(data any, index int, v any) error {
+	vv := reflect.ValueOf(data)
+	for vv.Kind() == reflect.Pointer || vv.Kind() == reflect.Interface {
+		vv = vv.Elem()
+	}
+	if index >= vv.Len() {
+		return fmt.Errorf("setList: %w", ErrOutRange)
+	}
 	vv.Index(index).Set(reflect.ValueOf(v))
+	return nil
 }
+
+var ErrOutRange = errors.New("超过数组范围")
 
 type ErrNotExistSector struct {
 	X        int
@@ -98,26 +110,6 @@ type ErrNotExistSector struct {
 
 func (e ErrNotExistSector) Error() string {
 	return fmt.Sprintf("没在 %v 中找到 %v %v", e.FilePath, e.X, e.Z)
-}
-
-func delKey(m *map[string]any) {
-	delKeyL := []string{}
-	for k, v := range *m {
-		if v == nil {
-			delKeyL = append(delKeyL, k)
-		}
-		if mm, ok := v.(map[string]any); ok {
-			delKey(&mm)
-			if len(mm) == 0 {
-				delKeyL = append(delKeyL, k)
-			}
-			(*m)[k] = mm
-		}
-	}
-	for _, v := range delKeyL {
-		delete(*m, v)
-	}
-
 }
 
 var ErrNotMap = errors.New("not map")
