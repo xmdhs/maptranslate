@@ -201,35 +201,26 @@ func getStrPathMap(m map[string]any, path string, sm *map[string]string) {
 		if path != "" {
 			npath = path + "." + k
 		}
-		rt := reflect.TypeOf(v)
-		rk := rt.Kind()
-		switch rk {
-		case reflect.Slice:
+		switch v := v.(type) {
+		case []any:
 			getStrPathSlice(v, npath, sm)
-		case reflect.Map:
-			getStrPathMap(v.(map[string]any), npath, sm)
-		case reflect.String:
-			(*sm)[npath] = v.(string)
+		case map[string]any:
+			getStrPathMap(v, npath, sm)
+		case string:
+			(*sm)[npath] = v
 		}
 	}
 }
 
-func getStrPathSlice(l any, path string, sm *map[string]string) {
-	rl := reflect.ValueOf(l)
-	rlen := rl.Len()
-
-	for i := 0; i < rlen; i++ {
-		ri := rl.Index(i)
-		if ri.Kind() == reflect.Interface {
-			ri = ri.Elem()
-		}
-		switch ri.Kind() {
-		case reflect.Slice:
-			getStrPathSlice(ri.Interface(), path+"["+strconv.Itoa(i)+"]", sm)
-		case reflect.Map:
-			getStrPathMap(ri.Interface().(map[string]any), path+"["+strconv.Itoa(i)+"]", sm)
-		case reflect.String:
-			(*sm)[path+"["+strconv.Itoa(i)+"]"] = ri.Interface().(string)
+func getStrPathSlice(l []any, path string, sm *map[string]string) {
+	for i, v := range l {
+		switch v := v.(type) {
+		case []any:
+			getStrPathSlice(v, path+"["+strconv.Itoa(i)+"]", sm)
+		case map[string]any:
+			getStrPathMap(v, path+"["+strconv.Itoa(i)+"]", sm)
+		case string:
+			(*sm)[path+"["+strconv.Itoa(i)+"]"] = v
 		}
 	}
 }
