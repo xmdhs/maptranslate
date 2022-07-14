@@ -3,7 +3,6 @@ package chunk
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -101,7 +100,7 @@ func mergeMap(dst *map[string]any, src map[string]string) error {
 			}
 			nk := reg.ReplaceAllString(k, "")
 			data := m.Get(nk).Data()
-			err = setList(&data, i, v)
+			err = setList(data, i, v)
 			if err != nil {
 				return fmt.Errorf("mergeMap: %w", err)
 			}
@@ -115,17 +114,14 @@ func mergeMap(dst *map[string]any, src map[string]string) error {
 }
 
 func setList(data any, index int, v any) error {
-	vv := reflect.ValueOf(data)
-	for vv.Kind() == reflect.Pointer || vv.Kind() == reflect.Interface {
-		vv = vv.Elem()
-	}
-	if vv.Kind() != reflect.Slice {
+	l, ok := data.([]any)
+	if !ok {
 		return fmt.Errorf("setList: %w", ErrNotSlice)
 	}
-	if index >= vv.Len() {
+	if index > len(l) {
 		return fmt.Errorf("setList: %w", ErrOutRange)
 	}
-	vv.Index(index).Set(reflect.ValueOf(v))
+	l[index] = v
 	return nil
 }
 
